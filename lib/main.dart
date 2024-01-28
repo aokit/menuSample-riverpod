@@ -132,7 +132,11 @@ class MenuScreen extends ConsumerWidget {
               ), */
               SwitchListTile(
                 title: const Text('Dark Mode'),
-                // value: darkState, // ・・・これだとインタラクティブには変わらない。
+                // value: darkState,
+                // ⬆・・・（上の方でfinal darkState = (theme.brightness == Brightness.dark);）
+                // ・・・・これだと値が変わったときに表示にインタラクティブに反映されない。
+                // value: ref.read(preferenceStateProvider).dark,
+                // ・・・・これも同様にだめ。
                 value: ref.watch(preferenceStateProvider.select((state) {
                   return state.dark;
                 })),
@@ -272,8 +276,13 @@ class PreferenceState {
       brightness: dark ? Brightness.dark : Brightness.light,
     );
   }
+
   // ⬇以下のようにして値を得る。
   // final theme = ref.read(preferenceStateProvider).getTheme();
+  //
+  bool getdark() {
+    return dark;
+  }
 }
 
 class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
