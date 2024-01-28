@@ -23,10 +23,19 @@
 // https://chat.openai.com/share/5d3fa5d1-fbdd-45da-8ea6-7dbf93b3365c
 // 20240128-0053---
 
+// ⬇
+// preferenceStateProvider　の中に　getTheme()　を実装した。
+// 20240128-1413---
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart'; // 追加
 
 // final themeProvider = StateProvider<bool>((ref) => false);
+
+const navigateMain = true; // false; // true;
+// Hive で設定されるものもあってもよいかも。
 
 void main() {
   runApp(const ProviderScope(child: MyApp()));
@@ -39,7 +48,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       title: 'Flutter Dark Mode Demo',
-      home: MenuScreen(),
+      // home: MenuScreen(),
+      // home: MainScreen(),
+      home: navigateMain ? MainScreen() : MenuScreen(),
     );
   }
 }
@@ -55,15 +66,21 @@ class MenuScreen extends ConsumerWidget {
     // final theme = isDarkMode ? ThemeData.dark() : ThemeData.light();
 
     //
-    final darkState = ref.watch(preferenceStateProvider.select((state) {
+    /* final darkState = ref.watch(preferenceStateProvider.select((state) {
       return state.dark;
-    }));
-    final useMaterial3State = ref.watch(preferenceStateProvider.select((state) {
+    })); */
+    /* final useMaterial3State = ref.watch(preferenceStateProvider.select((state) {
       return state.useMaterial3;
+    })); */
+    // ⬇・・・以下の theme でまとめて取得することができる。
+    final sample = ref.watch(preferenceStateProvider.select((state) {
+      return state.sample;
     }));
     final preferenceNotifier = ref.read(preferenceStateProvider.notifier);
     // final theme = darkState ? ThemeData.dark() : ThemeData.light();
-    final theme = darkState
+    final theme = ref.read(preferenceStateProvider).getTheme();
+    // ⬆・・・preferenceStateProvider　の中に　getTheme()　を実装した。
+    /* final theme = darkState
         ? ThemeData(
             // useMaterial3: false,
             useMaterial3: useMaterial3State,
@@ -74,8 +91,11 @@ class MenuScreen extends ConsumerWidget {
             useMaterial3: useMaterial3State,
             brightness: Brightness.light,
           );
+    */ //
+    // final darkState = (theme.brightness == Brightness.dark);
+    // final useMaterial3State = theme.useMaterial3;
+    // ┗・・・この方法だと変更がインタラクティブに反映されないので使わない。
     //
-
     return MaterialApp(
       theme: theme, // テーマを更新
       home: Scaffold(
@@ -88,14 +108,18 @@ class MenuScreen extends ConsumerWidget {
             children: [
               ElevatedButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) {
-                      return const MainScreen();
-                    }),
-                  );
+                  navigateMain
+                      ? Navigator.pop(context)
+                      : Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) {
+                            return const MainScreen();
+                          }),
+                        );
                 },
-                child: const Text('Go to Main Screen'),
+                child: navigateMain
+                    ? const Text('Back to Main Screen')
+                    : const Text('Go to Main Screen'),
               ),
               const SizedBox(height: 20),
               /* Switch(
@@ -108,16 +132,29 @@ class MenuScreen extends ConsumerWidget {
               ), */
               SwitchListTile(
                 title: const Text('Dark Mode'),
-                value: darkState,
+                // value: darkState, // ・・・これだとインタラクティブには変わらない。
+                value: ref.watch(preferenceStateProvider.select((state) {
+                  return state.dark;
+                })),
                 onChanged: (value) {
                   preferenceNotifier.set(dark: value);
                 },
               ),
               SwitchListTile(
                 title: const Text('useMaterial3'),
-                value: useMaterial3State,
+                // value: useMaterial3State,
+                value: ref.watch(preferenceStateProvider.select((state) {
+                  return state.useMaterial3;
+                })),
                 onChanged: (value) {
                   preferenceNotifier.set(useMaterial3: value);
+                },
+              ),
+              SwitchListTile(
+                title: const Text('sample'),
+                value: sample,
+                onChanged: (value) {
+                  preferenceNotifier.set(sample: value);
                 },
               ),
             ],
@@ -139,15 +176,22 @@ class MainScreen extends ConsumerWidget {
     // final theme = isDarkMode ? ThemeData.dark() : ThemeData.light();
 
     //
+    /*
     final darkState = ref.watch(preferenceStateProvider.select((state) {
       return state.dark;
     }));
     final useMaterial3State = ref.watch(preferenceStateProvider.select((state) {
       return state.useMaterial3;
-    }));
+    })); 
+    */
+    // ⬇・・・以下の theme でまとめて取得することができる。
     // final preferenceNotifier = ref.read(preferenceStateProvider.notifier);
     // final theme = darkState ? ThemeData.dark() : ThemeData.light();
-    final theme = darkState
+
+    // final theme = useProvider(themeDataProvider);
+    final theme = ref.read(preferenceStateProvider).getTheme();
+    // ⬆・・・preferenceStateProvider　の中に　getTheme()　を実装した。
+    /* final theme = darkState
         ? ThemeData(
             // useMaterial3: false,
             useMaterial3: useMaterial3State,
@@ -158,7 +202,7 @@ class MainScreen extends ConsumerWidget {
             useMaterial3: useMaterial3State,
             brightness: Brightness.light,
           );
-    //
+    */ //
 
     return MaterialApp(
       theme: theme, // テーマを更新
@@ -169,9 +213,18 @@ class MainScreen extends ConsumerWidget {
         body: Center(
           child: ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              navigateMain
+                  ? Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) {
+                        return const MenuScreen();
+                      }),
+                    )
+                  : Navigator.pop(context);
             },
-            child: const Text('Back to Menu Screen'),
+            child: navigateMain
+                ? const Text('Go to Menu Screen')
+                : const Text('Back to Menu Screen'),
           ),
         ),
       ),
@@ -187,21 +240,40 @@ class MainScreen extends ConsumerWidget {
 @immutable
 class PreferenceState {
   const PreferenceState({
+    // ここでの設定は初期値としては機能しないってことかな。
     this.dark = false,
     this.useMaterial3 = false,
+    this.startMain = false,
+    this.sample = false,
   });
   final bool dark;
   final bool useMaterial3;
+  final bool startMain;
+  final bool sample;
   //
   PreferenceState copyWith({
     bool? dark,
     bool? useMaterial3,
+    bool? startMain,
+    bool? sample,
   }) {
     return PreferenceState(
       dark: dark ?? this.dark,
       useMaterial3: useMaterial3 ?? this.useMaterial3,
+      startMain: startMain ?? this.startMain,
+      sample: sample ?? this.sample,
     );
   }
+
+  //　プロバイダから値を得たいときにはここで定義する。
+  ThemeData getTheme() {
+    return ThemeData(
+      useMaterial3: useMaterial3,
+      brightness: dark ? Brightness.dark : Brightness.light,
+    );
+  }
+  // ⬇以下のようにして値を得る。
+  // final theme = ref.read(preferenceStateProvider).getTheme();
 }
 
 class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
@@ -213,7 +285,9 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
   Future initialize() async {
     set(
       dark: false,
-      useMaterial3: false,
+      useMaterial3: true, //false,
+      startMain: true,
+      sample: false,
     );
   }
 
@@ -222,10 +296,21 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
     return false;
   }
 
+  /*
+  ThemeData _theme() {
+    return ThemeData(
+      useMaterial3: state.useMaterial3,
+      brightness: state.dark ? Brightness.dark : Brightness.light,
+    );
+  }
+  */
+
   // 値の更新をimmutableに焼き付けるのはこの関数（set）の記述
   Future<void> set({
     bool? dark,
     bool? useMaterial3,
+    bool? startMain,
+    bool? sample,
   })
   // 実際の処理はここから
   async {
@@ -233,6 +318,8 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
     state = state.copyWith(
       dark: dark,
       useMaterial3: useMaterial3,
+      startMain: startMain,
+      sample: sample,
     );
     // 必要ならここで与えられた値の間の相互作用も記述できると思う。
     if (dark == null) {
@@ -246,6 +333,16 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
 final preferenceStateProvider =
     StateNotifierProvider<PreferenceStateNotifier, PreferenceState>((ref) {
   return PreferenceStateNotifier();
+});
+
+final themeDataProvider = Provider<ThemeData>((ref) {
+  final preferenceState = ref.watch(preferenceStateProvider);
+
+  return ThemeData(
+    useMaterial3: preferenceState.useMaterial3,
+    brightness: preferenceState.dark ? Brightness.dark : Brightness.light,
+    // 他のテーマデータプロパティをここに追加できます
+  );
 });
 
 /* --- ================================================================================================= --- */
