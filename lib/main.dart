@@ -35,6 +35,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart'; // 追加
 // final themeProvider = StateProvider<bool>((ref) => false);
 
 const navigateMain = true; // false; // true;
+// true で再起動した場合（起動した場合）MenuScreenで設定したテーマ
+// が MainScreen に反映されないバグがある。
 // Hive で設定されるものもあってもよいかも。
 
 void main() {
@@ -174,6 +176,44 @@ class MainScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    //
+    print('再ビルド');
+    final theme = ref.read(themeDataProvider); // テーマを取得
+    // final theme = ref.read(preferenceStateProvider).getTheme();
+
+    return MaterialApp(
+      theme: theme, // テーマを更新
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Main Screen'),
+        ),
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () {
+              navigateMain
+                  ? Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) {
+                        return const MenuScreen();
+                      }),
+                    )
+                  : Navigator.pop(context);
+            },
+            child: navigateMain
+                ? const Text('Go to Menu Screen')
+                : const Text('Back to Menu Screen'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MainScreen extends ConsumerWidget {
+  const _MainScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     // final isDarkMode = ref.watch(themeProvider); // StateController<bool> を取得する
 
     // テーマを取得
@@ -193,7 +233,8 @@ class MainScreen extends ConsumerWidget {
     // final theme = darkState ? ThemeData.dark() : ThemeData.light();
 
     // final theme = useProvider(themeDataProvider);
-    final theme = ref.read(preferenceStateProvider).getTheme();
+    // final theme = ref.read(preferenceStateProvider).getTheme();
+    final theme = ref.read(themeDataProvider);
     // ⬆・・・preferenceStateProvider　の中に　getTheme()　を実装した。
     /* final theme = darkState
         ? ThemeData(
