@@ -34,26 +34,45 @@ import 'package:hooks_riverpod/hooks_riverpod.dart'; // 追加
 
 // final themeProvider = StateProvider<bool>((ref) => false);
 
-const navigateMain = true; // false; // true;
+// const startFromMain = true; // false; // true;
 // true で再起動した場合（起動した場合）MenuScreenで設定したテーマ
 // が MainScreen に反映されないバグがある。
 // Hive で設定されるものもあってもよいかも。
+//
+const defaultStartIsFromMain = true; // false; // true;
 
 void main() {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatelessWidget {
+// class MyApp extends StatelessWidget {
+// ⬇
+// ⬇・・・『ref.read(preferenceStateProvider).startFromMain』が必要
+// になったので『Widget build(BuildContext context) {』
+// を『Widget build(BuildContext context, WidgetRef ref) {』
+// にする。そのために『Stateless』ではなくて『Consumer』にする。そういう
+// 書き換えができるということがわかった。
+// 20240131-0033---
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Flutter Dark Mode Demo',
-      // home: MenuScreen(),
-      // home: MainScreen(),
-      home: navigateMain ? MainScreen() : MenuScreen(),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool startFromMain = ref.read(preferenceStateProvider).startFromMain;
+    // 最初のスクリーンをメインのとするかメニューのとするかを設定に従うようにした。
+    // 設定値によりいずれかのウイジェットを生成する。
+    // 20240131-0033---
+    if (startFromMain) {
+      return const MaterialApp(
+        title: 'Flutter Dark Mode Demo',
+        home: MainScreen(),
+      );
+    } else {
+      return const MaterialApp(
+        title: 'Flutter Dark Mode Demo',
+        home: MenuScreen(),
+      );
+    }
   }
 }
 
@@ -80,8 +99,24 @@ class MenuScreen extends ConsumerWidget {
     }));
     final preferenceNotifier = ref.read(preferenceStateProvider.notifier);
     // final theme = darkState ? ThemeData.dark() : ThemeData.light();
-    final theme = ref.read(preferenceStateProvider).getTheme();
+    // final theme = ref.read(preferenceStateProvider).getTheme();
     // ⬆・・・preferenceStateProvider　の中に　getTheme()　を実装した。
+    final theme = ref.read(themeDataProvider); // テーマを取得
+    // ⬆・・・こちら（MenuScreeの側）だと別に作ったthemeDataProviderでも大丈夫。
+    // いっぽう MainScreen の側ではプロバイダから変化を受け取るために read ではな
+    // くて watch で作られている
+    // final theme = ref.watch(preferenceStateProvider).getTheme();
+    // を使う必要がある。
+    // final theme = ref.watch(themeDataProvider); // テーマを取得
+    // でもよさそう。
+    //
+    final bool startFromMain = ref.read(preferenceStateProvider).startFromMain;
+    // ref.read(...) を ref.watch(...) に変えると状態が変わったときに
+    // ウィジェットの再ビルドをトリガすることができるらしい。read か watch か
+    // を選べることがわかったぞ。⬇
+    // final bool startFromMain = ref.watch(preferenceStateProvider).startFromMain;
+    // 20240131-0033---
+    //
     /* final theme = darkState
         ? ThemeData(
             // useMaterial3: false,
@@ -97,6 +132,9 @@ class MenuScreen extends ConsumerWidget {
     // final darkState = (theme.brightness == Brightness.dark);
     // final useMaterial3State = theme.useMaterial3;
     // ┗・・・この方法だと変更がインタラクティブに反映されないので使わない。
+    // その理由がはじめは分からなかったのだが、それは ref.read() で theme を
+    // 得ているからだったのだろうと思う。
+    // 20240131-0033---
     //
     return MaterialApp(
       theme: theme, // テーマを更新
@@ -109,8 +147,8 @@ class MenuScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ElevatedButton(
-                onPressed: () {
-                  navigateMain
+                /*onPressed: () {
+                  startFromMain
                       ? Navigator.pop(context)
                       : Navigator.push(
                           context,
@@ -118,8 +156,33 @@ class MenuScreen extends ConsumerWidget {
                             return const MainScreen();
                           }),
                         );
+                },*/
+                onPressed: () {
+                  if (startFromMain) {
+                    /* ref
+                        .read(preferenceStateProvider.notifier)
+                        .set(startFromMain: true); // Providerの状態変更 */
+                    // .set(sample: true); // Providerの状態変更
+                    // ┗・・・インタラクティブに再ビルドしてもらうために
+                    // これらを入れるというアイデアを　chat-GPT　から
+                    // 得たがそれは必要ではなかった。
+                    // 20240131-0033---
+                    Navigator.pop(context);
+                  } else {
+                    // 画面遷移は一方方向にすすめることも戻ることもできるらしい。
+                    // 20240131-0033---
+                    // Navigator.pushReplacement(
+                    // ┗・・・戻るのではなくて一方向に進める場合はこれ
+                    // ┏・・・戻る場合はこれ
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) {
+                        return const MainScreen();
+                      }),
+                    );
+                  }
                 },
-                child: navigateMain
+                child: startFromMain
                     ? const Text('Back to Main Screen')
                     : const Text('Go to Main Screen'),
               ),
@@ -139,6 +202,9 @@ class MenuScreen extends ConsumerWidget {
                 // ・・・・これだと値が変わったときに表示にインタラクティブに反映されない。
                 // value: ref.read(preferenceStateProvider).dark,
                 // ・・・・これも同様にだめ。
+                // これらがだめだったのは、 ref.read() であるオブジェクトの操作だったから
+                // かもしれない。実際、うまく機能している以下の記述は ref.watch() である。
+                // 20240131-0033---
                 value: ref.watch(preferenceStateProvider.select((state) {
                   return state.dark;
                 })),
@@ -154,6 +220,17 @@ class MenuScreen extends ConsumerWidget {
                 })),
                 onChanged: (value) {
                   preferenceNotifier.set(useMaterial3: value);
+                },
+              ),
+              SwitchListTile(
+                title: const Text('startFromMain(required Reboot)'),
+                value: startFromMain,
+                onChanged: (value) {
+                  // preferenceNotifier.set(startFromMain: value);
+                  // ┗・・・・・・startFromMainは　Navigator　についての
+                  // ハードコーディングと干渉してしまうのでアプリを再起動する
+                  // ときにしか値の変更を反映させないようにすることが必要。
+                  // 20240131-0033---
                 },
               ),
               SwitchListTile(
@@ -176,6 +253,150 @@ class MainScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // final theme = ref.read(themeDataProvider); // テーマを取得
+    // final theme = ref.watch(preferenceStateProvider).getTheme();
+    // ref.watch() であることが重要。おそらく以下⬇でも大丈夫のはず。
+    final theme = ref.watch(themeDataProvider); // テーマの更新を取得
+    // 大丈夫だった。
+    // 20240131-0033---
+    final bool startFromMain = ref.read(preferenceStateProvider).startFromMain;
+
+    return MaterialApp(
+      theme: theme, // テーマを更新
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Main Screen'),
+        ),
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () {
+              startFromMain
+                  ? Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) {
+                        return const MenuScreen();
+                      }),
+                    )
+                  : Navigator.pop(context);
+            },
+            child: startFromMain
+                ? const Text('Go to Menu Screen')
+                : const Text('Back to Menu Screen'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/*
+class E_MainScreen extends ConsumerWidget {
+  const E_MainScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.read(themeDataProvider); // テーマを取得
+    // final theme = ref.watch(preferenceStateProvider).getTheme();
+
+    return MaterialApp(
+      theme: theme, // テーマを更新
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Main Screen'),
+        ),
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) {
+                  return const MenuScreen();
+                }),
+              );
+            },
+            child: const Text('Go to Menu Screen'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class D_MainScreen extends ConsumerWidget {
+  const D_MainScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    /* final preferenceState =
+        ref.watch(preferenceStateProvider); // Providerの状態をウォッチ
+    */
+    final theme = ref.read(themeDataProvider); // テーマを取得
+
+    return MaterialApp(
+      theme: theme, // テーマを更新
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Main Screen'),
+        ),
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) {
+                  return const MenuScreen();
+                }),
+              );
+            },
+            child: const Text('Go to Menu Screen'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class C_MainScreen extends ConsumerWidget {
+  const C_MainScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preferenceState =
+        ref.watch(preferenceStateProvider); // Providerの状態をウォッチ
+
+    final theme = ref.read(themeDataProvider); // テーマを取得
+
+    return MaterialApp(
+      theme: theme, // テーマを更新
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Main Screen'),
+        ),
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () {
+              // if (!preferenceState.startFromMain) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) {
+                  return const MenuScreen();
+                }),
+              );
+              // }
+            },
+            child: const Text('Go to Menu Screen'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class B_MainScreen extends ConsumerWidget {
+  const B_MainScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     //
     print('再ビルド');
     final theme = ref.read(themeDataProvider); // テーマを取得
@@ -190,7 +411,7 @@ class MainScreen extends ConsumerWidget {
         body: Center(
           child: ElevatedButton(
             onPressed: () {
-              navigateMain
+              startFromMain
                   ? Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) {
@@ -199,7 +420,7 @@ class MainScreen extends ConsumerWidget {
                     )
                   : Navigator.pop(context);
             },
-            child: navigateMain
+            child: startFromMain
                 ? const Text('Go to Menu Screen')
                 : const Text('Back to Menu Screen'),
           ),
@@ -209,8 +430,8 @@ class MainScreen extends ConsumerWidget {
   }
 }
 
-class _MainScreen extends ConsumerWidget {
-  const _MainScreen({super.key});
+class A_MainScreen extends ConsumerWidget {
+  const A_MainScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -258,7 +479,7 @@ class _MainScreen extends ConsumerWidget {
         body: Center(
           child: ElevatedButton(
             onPressed: () {
-              navigateMain
+              startFromMain
                   ? Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) {
@@ -267,7 +488,7 @@ class _MainScreen extends ConsumerWidget {
                     )
                   : Navigator.pop(context);
             },
-            child: navigateMain
+            child: startFromMain
                 ? const Text('Go to Menu Screen')
                 : const Text('Back to Menu Screen'),
           ),
@@ -276,6 +497,7 @@ class _MainScreen extends ConsumerWidget {
     );
   }
 }
+*/
 
 /* --- ================================================================================================= --- */
 // riverpod のプロバイダに管理させる状態（を提供するクラス）；生成されるのみで変更は不可能
@@ -288,24 +510,24 @@ class PreferenceState {
     // ここでの設定は初期値としては機能しないってことかな。
     this.dark = false,
     this.useMaterial3 = false,
-    this.startMain = false,
+    this.startFromMain = false,
     this.sample = false,
   });
   final bool dark;
   final bool useMaterial3;
-  final bool startMain;
+  final bool startFromMain;
   final bool sample;
   //
   PreferenceState copyWith({
     bool? dark,
     bool? useMaterial3,
-    bool? startMain,
+    bool? startFromMain,
     bool? sample,
   }) {
     return PreferenceState(
       dark: dark ?? this.dark,
       useMaterial3: useMaterial3 ?? this.useMaterial3,
-      startMain: startMain ?? this.startMain,
+      startFromMain: startFromMain ?? this.startFromMain,
       sample: sample ?? this.sample,
     );
   }
@@ -317,13 +539,25 @@ class PreferenceState {
       brightness: dark ? Brightness.dark : Brightness.light,
     );
   }
-
   // ⬇以下のようにして値を得る。
   // final theme = ref.read(preferenceStateProvider).getTheme();
-  //
+
+  // メンバ変数は以下のような関数を明示的に作らなくても
+  // 以下のようにして値を得ることができる。
+  // final startFromMain = ref.read(preferenceStateProvider).startFromMain;
+  // final startFromMain = ref.watch(preferenceStateProvider).startFromMain;
+  // 後者は値を得るほかに更新を検出してウイジェットの再ビルドをトリガさせることができる。
+  // 20240131-0033---
+  /*
   bool getdark() {
     return dark;
   }
+  */
+  /*
+  bool startFromMain() {
+    return startFromMain;
+  }
+  */
 }
 
 class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
@@ -336,16 +570,27 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
     set(
       dark: false,
       useMaterial3: true, //false,
-      startMain: true,
+      startFromMain: defaultStartIsFromMain,
       sample: false,
     );
   }
 
-  //　ひょっとしたら get のほうも定義できるのだろう。
+  // ひょっとしたら get のほうも定義できる？・・・いやできなさそう。
+  // ここではメンバ変数にアクセスできない。
+  // ・・・というか要らない。『ref.read(preferenceStateProvider).メンバ変数名』
+  // でアクセスできるから。ではここには何を書くのがよいのだろうか。
+  // 20240131-0033---
+  /*
   Future<bool> get _dark async {
+    // return dark;
     return false;
   }
 
+  Future<bool> get _startFromMain async {
+    return false;
+    //startFromMain;
+  }
+  */
   /*
   ThemeData _theme() {
     return ThemeData(
@@ -355,11 +600,13 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
   }
   */
 
-  // 値の更新をimmutableに焼き付けるのはこの関数（set）の記述
+  // 値の更新をimmutableに焼き付ける（単一代入する＝新たな値で生成する）のは
+  // この関数（set）の記述。中身は state である PreferenceState に用意し
+  // てある copywith 関数を実行すること。
   Future<void> set({
     bool? dark,
     bool? useMaterial3,
-    bool? startMain,
+    bool? startFromMain,
     bool? sample,
   })
   // 実際の処理はここから
@@ -368,7 +615,7 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
     state = state.copyWith(
       dark: dark,
       useMaterial3: useMaterial3,
-      startMain: startMain,
+      startFromMain: startFromMain,
       sample: sample,
     );
     // 必要ならここで与えられた値の間の相互作用も記述できると思う。
