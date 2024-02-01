@@ -215,9 +215,16 @@ class MenuScreen extends ConsumerWidget {
               SwitchListTile(
                 title: const Text('useMaterial3'),
                 // value: useMaterial3State,
-                value: ref.watch(preferenceStateProvider.select((state) {
+                value:
+                    /* ref.watch(preferenceStateProvider.select((state) {
                   return state.useMaterial3;
-                })),
+                })), */
+                    // ⬇・・・書き換え
+                    ref.watch(preferenceStateProvider).useMaterial3,
+                // ┏・・・readだと更新でウイジェットが再ビルドされない
+                // 　　　　ので表示が変わらない。
+                // ref.read(preferenceStateProvider).useMaterial3,
+                //
                 onChanged: (value) {
                   preferenceNotifier.set(useMaterial3: value);
                 },
@@ -238,6 +245,7 @@ class MenuScreen extends ConsumerWidget {
                 value: sample,
                 onChanged: (value) {
                   preferenceNotifier.set(sample: value);
+                  // ref.read(preferenceStateProvider.notifier).set(sample: value);
                 },
               ),
             ],
@@ -504,33 +512,56 @@ class A_MainScreen extends ConsumerWidget {
 // https://chat.openai.com/share/337e1a2e-065e-4861-b919-53f8a2894cc1
 // そういうルールに従うことで、安全（実行のタイミングなどに関わらずコードの上で記述
 // との関係が明確になるよう）にコーディングできる。
-@immutable
+//
+// ■１・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・
+// まず状態をもつクラスを用意する。コンストラクタと copyWith を用意する。
+@immutable // 変更があるとオブジェクトが新たに作り出される
 class PreferenceState {
+  // ▼１：コンストラクタ
   const PreferenceState({
-    // ここでの設定は初期値としては機能しないってことかな。
+    // ここでの設定は初期値としては機能しないが文法的整合性のために記述が必要。
     this.dark = false,
     this.useMaterial3 = false,
     this.startFromMain = false,
     this.sample = false,
+    // ためしに初期値を定義しないでみよう。でもそうすると
+    // required が必要ということになり、それをつけると
+    // 今度はこのあとの
+    // PreferenceStateNotifier() : super(const PreferenceState()) {・・・
+    // のところで、 PreferenceState() で引数がないのでコンパイルエラーになる。
+    // なので、機能しなくても初期値を与える必要があるってことになる。
+    /*
+    required this.dark,
+    required this.useMaterial3,
+    required this.startFromMain,
+    required this.sample,
+    */
   });
   final bool dark;
   final bool useMaterial3;
   final bool startFromMain;
   final bool sample;
   //
+  // ▼２：copyWith を用意する。
   PreferenceState copyWith({
     bool? dark,
     bool? useMaterial3,
     bool? startFromMain,
     bool? sample,
   }) {
+    // 返す値はあらたに生成。型はこのクラスそのもの。
     return PreferenceState(
+      // 名前付き引数として与えられたメンバ変数はその値に
+      // 与えられなかったメンバ変数はもともとの値に
       dark: dark ?? this.dark,
       useMaterial3: useMaterial3 ?? this.useMaterial3,
       startFromMain: startFromMain ?? this.startFromMain,
       sample: sample ?? this.sample,
     );
   }
+  // 文字列のメンバ変数だと空の文字列を与えても null なので
+  // メンバ変数のもともとの値である文字列を空の文字列にすることが
+  // できない。どうするのかな。
 
   //　プロバイダから値を得たいときにはここで定義する。
   ThemeData getTheme() {
@@ -560,12 +591,18 @@ class PreferenceState {
   */
 }
 
+// ■２・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・
+// 提供することにして定義した状態に通知（Notifier）の機能を備え付ける
+// ために StateNotifier の拡張型として
+// １：コンストラクタと（その中で行う）２：初期化と（それに使う）３：設定
+// を定義する。
 class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
+  // ▼１：コンストラクタ：初期化を実行するのみ
   PreferenceStateNotifier() : super(const PreferenceState()) {
     initialize();
   }
 
-  // 初期値はここで定義する
+  // ▼２：初期化：ここで定義したものが提供される初期値となる。
   Future initialize() async {
     set(
       dark: false,
@@ -603,6 +640,7 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
   // 値の更新をimmutableに焼き付ける（単一代入する＝新たな値で生成する）のは
   // この関数（set）の記述。中身は state である PreferenceState に用意し
   // てある copywith 関数を実行すること。
+  // ▼３：設定
   Future<void> set({
     bool? dark,
     bool? useMaterial3,
@@ -612,6 +650,8 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
   // 実際の処理はここから
   async {
     // まずはコピー
+    // 名前指定されていないメンバ変数には null が渡されるが 名前指定で null の
+    // copyWith になるので、もとの値が与えられる、はず。
     state = state.copyWith(
       dark: dark,
       useMaterial3: useMaterial3,
@@ -627,19 +667,42 @@ class PreferenceStateNotifier extends StateNotifier<PreferenceState> {
   }
 }
 
+// ■３・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・・
+// 大域でプロバイダを生成・・・ここでコンストラクタが作用するんだろうな。
 final preferenceStateProvider =
     StateNotifierProvider<PreferenceStateNotifier, PreferenceState>((ref) {
   return PreferenceStateNotifier();
 });
+// 値を設定するときは　preferenceStateProvider　を次のように使って記述する。
+// 例えば
+// final preferenceNotifier = ref.read(preferenceStateProvider.notifier);
+// としておいて
+// preferenceNotifier.set(sample: value);
+// とするなど。
+// 値を得たいときは
+// final bool startFromMain = ref.read(preferenceStateProvider).startFromMain;
+// とか
+// final sample = ref.watch(preferenceStateProvider.select((state) {
+//    return state.sample;
+// }));
+// とか記述することで参照できる。いずれも、read とすると純粋に値の参照のみだが
+// watch とすると値を参照するとともに、
+// 更新されたときに記述されているウイジェットの再ビルドを促すトリガにもなる。
+// 返しているのはそれ自体は StateNotifierProvider であるがその関数が返すのは
+// StateNotifier を返すので StateNotifier として備え付けた set などを使う
+// ことができる・・・のかな。
 
+// こんなふうにしてプロバイダを生成することもできるらしい。
 final themeDataProvider = Provider<ThemeData>((ref) {
   final preferenceState = ref.watch(preferenceStateProvider);
-
   return ThemeData(
     useMaterial3: preferenceState.useMaterial3,
     brightness: preferenceState.dark ? Brightness.dark : Brightness.light,
     // 他のテーマデータプロパティをここに追加できます
   );
 });
+// プロバイダによって値を参照するには以下のように記述する。
+// final theme = ref.read(themeDataProvider); // 値を取得するだけ
+// final theme = ref.watch(themeDataProvider); // 値の取得と更新のトリガ
 
 /* --- ================================================================================================= --- */
